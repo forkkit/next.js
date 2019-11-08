@@ -41,7 +41,7 @@ type AmpStatus = {
   code: string
 }
 
-type AmpPageStatus = {
+export type AmpPageStatus = {
   [page: string]: { errors: AmpStatus[]; warnings: AmpStatus[] }
 }
 
@@ -173,7 +173,7 @@ buildStore.subscribe(state => {
       }
 
       if (Object.keys(amp).length > 0) {
-        warnings = (warnings || []).concat(formatAmpMessages(amp))
+        warnings = (warnings || []).concat(formatAmpMessages(amp) || [])
         if (!warnings.length) warnings = null
       }
     }

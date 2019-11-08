@@ -6,7 +6,8 @@ export async function unstable_getStaticParams () {
   return [
     '/blog/post-1',
     { post: 'post-2' },
-    '/blog/[post3]'
+    '/blog/[post3]',
+    '/blog/post.1'
   ]
 }
 
@@ -16,6 +17,10 @@ export async function unstable_getStaticProps ({ params }) {
     await new Promise(resolve => {
       setTimeout(() => resolve(), 1000)
     })
+  }
+
+  if (params.post === 'post-100') {
+    throw new Error('such broken..')
   }
 
   return {

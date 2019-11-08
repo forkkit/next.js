@@ -42,6 +42,7 @@ const nextServerlessLoader: loader.Loader = function() {
     /\\/g,
     '/'
   )
+  const escapedBuildId = buildId.replace(/[|\\{}()[\]^$+*?.-]/g, '\\$&')
 
   if (page.match(API_ROUTE)) {
     return `
@@ -55,22 +56,35 @@ const nextServerlessLoader: loader.Loader = function() {
     }
       import { parse } from 'url'
       import { apiResolver } from 'next/dist/next-server/server/api-utils'
+      import initServer from 'next-plugin-loader?middleware=on-init-server!'
+      import onError from 'next-plugin-loader?middleware=on-error-server!'
 
-      export default (req, res) => {
-        const params = ${
-          isDynamicRoute(page)
-            ? `getRouteMatcher(getRouteRegex('${page}'))(parse(req.url).pathname)`
-            : `{}`
+      export default async (req, res) => {
+        try {
+          await initServer()
+          const params = ${
+            isDynamicRoute(page)
+              ? `getRouteMatcher(getRouteRegex('${page}'))(parse(req.url).pathname)`
+              : `{}`
+          }
+          const resolver = require('${absolutePagePath}')
+          apiResolver(req, res, params, resolver)
+        } catch (error) {
+          await onError(err)
+          console.error(err)
+          res.statusCode = 500
+          res.end('Internal Server Error')
         }
-        const resolver = require('${absolutePagePath}')
-        apiResolver(req, res, params, resolver)
       }
     `
   } else {
     return `
     import {parse} from 'url'
+    import {parse as parseQs} from 'querystring'
     import {renderToHTML} from 'next/dist/next-server/server/render';
     import {sendHTML} from 'next/dist/next-server/server/send-html';
+    import initServer from 'next-plugin-loader?middleware=on-init-server!'
+    import onError from 'next-plugin-loader?middleware=on-error-server!'
     ${
       isDynamicRoute(page)
         ? `import {getRouteMatcher, getRouteRegex} from 'next/dist/next-server/lib/router/utils';`
@@ -110,7 +124,7 @@ const nextServerlessLoader: loader.Loader = function() {
       if (req.url.match(/_next\\/data/)) {
         sprData = true
         req.url = req.url
-          .replace(/\\/_next\\/data\\//, '/')
+          .replace(new RegExp('/_next/data/${escapedBuildId}/'), '/')
           .replace(/\\.json$/, '')
       }
       const parsedUrl = parse(req.url, true)
@@ -130,7 +144,52 @@ const nextServerlessLoader: loader.Loader = function() {
             ? `const params = fromExport && !unstable_getStaticProps ? {} : getRouteMatcher(getRouteRegex("${page}"))(parsedUrl.pathname) || {};`
             : `const params = {};`
         }
-        const result = await renderToHTML(req, res, "${page}", Object.assign({}, unstable_getStaticProps ? {} : parsedUrl.query, params, sprData ? { _nextSprData: '1' } : {}), renderOpts)
+        ${
+          // Temporary work around: `x-now-route-matches` is a platform header
+          // _only_ set for `Prerender` requests. We should move this logic
+          // into our builder to ensure we're decoupled. However, this entails
+          // removing reliance on `req.url` and using `req.query` instead
+          // (which is needed for "custom routes" anyway).
+          isDynamicRoute(page)
+            ? `const nowParams = req.headers && req.headers["x-now-route-matches"]
+              ? getRouteMatcher(
+                  (function() {
+                    const { re, groups } = getRouteRegex("${page}");
+                    return {
+                      re: {
+                        // Simulate a RegExp match from the \`req.url\` input
+                        exec: str => {
+                          const obj = parseQs(str);
+                          return Object.keys(obj).reduce(
+                            (prev, key) =>
+                              Object.assign(prev, {
+                                [key]: encodeURIComponent(obj[key])
+                              }),
+                            {}
+                          );
+                        }
+                      },
+                      groups
+                    };
+                  })()
+                )(req.headers["x-now-route-matches"])
+              : null;
+          `
+            : `const nowParams = null;`
+        }
+        let result = await renderToHTML(req, res, "${page}", Object.assign({}, unstable_getStaticProps ? {} : parsedUrl.query, nowParams ? nowParams : params, sprData ? { _nextSprData: '1' } : {}), renderOpts)
+
+        if (sprData && !fromExport) {
+          const payload = JSON.stringify(renderOpts.sprData)
+          res.setHeader('Content-Type', 'application/json')
+          res.setHeader('Content-Length', Buffer.byteLength(payload))
+          res.setHeader(
+            'Cache-Control',
+            \`s-maxage=\${renderOpts.revalidate}, stale-while-revalidate\`
+          )
+          res.end(payload)
+          return null
+        }
 
         if (fromExport) return { html: result, renderOpts }
         return result
@@ -154,9 +213,13 @@ const nextServerlessLoader: loader.Loader = function() {
     }
     export async function render (req, res) {
       try {
+        await initServer()
         const html = await renderReqToHTML(req, res)
-        sendHTML(req, res, html, {generateEtags: ${generateEtags}})
+        if (html) {
+          sendHTML(req, res, html, {generateEtags: ${generateEtags}})
+        }
       } catch(err) {
+        await onError(err)
         console.error(err)
         res.statusCode = 500
         res.end('Internal Server Error')

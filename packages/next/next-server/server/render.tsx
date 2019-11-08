@@ -158,6 +158,7 @@ type RenderOpts = {
     props: any
     revalidate: number | false
   }
+  unstable_getStaticParams?: () => void
 }
 
 function renderDocument(
@@ -187,7 +188,11 @@ function renderDocument(
     staticMarkup,
     devFiles,
     files,
+    polyfillFiles,
     dynamicImports,
+    htmlProps,
+    bodyTags,
+    headTags,
   }: RenderOpts & {
     dataManagerData: string
     props: any
@@ -203,14 +208,18 @@ function renderDocument(
     dynamicImports: ManifestItem[]
     files: string[]
     devFiles: string[]
+    polyfillFiles: string[]
+    htmlProps: any
+    bodyTags: any
+    headTags: any
   }
 ): string {
   return (
     '<!DOCTYPE html>' +
     renderToStaticMarkup(
       <AmpStateContext.Provider value={ampState}>
-        <Document
-          __NEXT_DATA__={{
+        {Document.renderDocument(Document, {
+          __NEXT_DATA__: {
             dataManager: dataManagerData,
             props, // The result of getInitialProps
             page: pathname, // The rendered page
@@ -224,21 +233,25 @@ function renderDocument(
             dynamicIds:
               dynamicImportsIds.length === 0 ? undefined : dynamicImportsIds,
             err: err ? serializeError(dev, err) : undefined, // Error if one happened, otherwise don't sent in the resulting HTML
-          }}
-          dangerousAsPath={dangerousAsPath}
-          canonicalBase={canonicalBase}
-          ampPath={ampPath}
-          inAmpMode={inAmpMode}
-          isDevelopment={!!dev}
-          hasCssMode={hasCssMode}
-          hybridAmp={hybridAmp}
-          staticMarkup={staticMarkup}
-          devFiles={devFiles}
-          files={files}
-          dynamicImports={dynamicImports}
-          assetPrefix={assetPrefix}
-          {...docProps}
-        />
+          },
+          dangerousAsPath,
+          canonicalBase,
+          ampPath,
+          inAmpMode,
+          isDevelopment: !!dev,
+          hasCssMode,
+          hybridAmp,
+          staticMarkup,
+          devFiles,
+          files,
+          polyfillFiles,
+          dynamicImports,
+          assetPrefix,
+          htmlProps,
+          bodyTags,
+          headTags,
+          ...docProps,
+        })}
       </AmpStateContext.Provider>
     )
   )
@@ -268,7 +281,31 @@ export async function renderToHTML(
     reactLoadableManifest,
     ErrorDebug,
     unstable_getStaticProps,
+    unstable_getStaticParams,
   } = renderOpts
+
+  const callMiddleware = async (method: string, args: any[], props = false) => {
+    let results: any = props ? {} : []
+
+    if ((Document as any)[`${method}Middleware`]) {
+      const curResults = await (Document as any)[`${method}Middleware`](...args)
+      if (props) {
+        for (const result of curResults) {
+          results = {
+            ...results,
+            ...result,
+          }
+        }
+      } else {
+        results = curResults
+      }
+    }
+    return results
+  }
+
+  const headTags = (...args: any) => callMiddleware('headTags', args)
+  const bodyTags = (...args: any) => callMiddleware('bodyTags', args)
+  const htmlProps = (...args: any) => callMiddleware('htmlProps', args, true)
 
   const isSpr = !!unstable_getStaticProps
   const defaultAppGetInitialProps =
@@ -281,6 +318,12 @@ export async function renderToHTML(
 
   if (hasPageGetInitialProps && isSpr) {
     throw new Error(SPR_GET_INITIAL_PROPS_CONFLICT + ` ${pathname}`)
+  }
+
+  if (!!unstable_getStaticParams && !isSpr) {
+    throw new Error(
+      `unstable_getStaticParams was added without a unstable_getStaticProps in ${pathname}. Without unstable_getStaticProps, unstable_getStaticParams does nothing`
+    )
   }
 
   if (dev) {
@@ -313,6 +356,7 @@ export async function renderToHTML(
     }
   }
   if (isAutoExport) renderOpts.autoExport = true
+  if (isSpr) renderOpts.nextExport = false
 
   await Loadable.preloadAll() // Make sure all dynamic imports are loaded
 
@@ -386,9 +430,9 @@ export async function renderToHTML(
 
       if (invalidKeys.length) {
         throw new Error(
-          `Additional keys were returned from \`getStaticProps\`. Properties intended for your component must be nested under the \`props\` key, e.g.:\n\n\treturn { props: { title: 'My Title', content: '...' }\n\nKeys that need moved: ${invalidKeys.join(
-            ', '
-          )}.
+          `Additional keys were returned from \`getStaticProps\`. Properties intended for your component must be nested under the \`props\` key, e.g.:` +
+            `\n\n\treturn { props: { title: 'My Title', content: '...' }` +
+            `\n\nKeys that need moved: ${invalidKeys.join(', ')}.
         `
         )
       }
@@ -401,12 +445,13 @@ export async function renderToHTML(
             }', cannot be used.` +
               `\nTry changing the value to '${Math.ceil(
                 data.revalidate
-              )}' or using \`Math.round()\` if you're computing the value.`
+              )}' or using \`Math.ceil()\` if you're computing the value.`
           )
-        } else if (data.revalidate < 0) {
+        } else if (data.revalidate <= 0) {
           throw new Error(
-            `A page's revalidate option can not be less than zero. A revalidate option of zero means to revalidate _after_ every request.` +
-              `\nTo never revalidate, you can set revalidate to \`false\` (only ran once at build-time).`
+            `A page's revalidate option can not be less than or equal to zero. A revalidate option of zero means to revalidate after _every_ request, and implies stale data cannot be tolerated.` +
+              `\n\nTo never revalidate, you can set revalidate to \`false\` (only ran once at build-time).` +
+              `\nTo revalidate as soon as possible, you can set the value to \`1\`.`
           )
         } else if (data.revalidate > 31536000) {
           // if it's greater than a year for some reason error
@@ -446,6 +491,7 @@ export async function renderToHTML(
       ...getPageFiles(buildManifest, '/_app'),
     ]),
   ]
+  const polyfillFiles = getPageFiles(buildManifest, '/_polyfills')
 
   const renderElementToString = staticMarkup
     ? renderToStaticMarkup
@@ -538,8 +584,8 @@ export async function renderToHTML(
       )
     }
   }
-
-  const docProps = await loadGetInitialProps(Document, { ...ctx, renderPage })
+  const documentCtx = { ...ctx, renderPage }
+  const docProps = await loadGetInitialProps(Document, documentCtx)
   // the response might be finished on the getInitialProps call
   if (isResSent(res) && !isSpr) return null
 
@@ -587,6 +633,9 @@ export async function renderToHTML(
     dataManagerData,
     ampState,
     props,
+    headTags: await headTags(documentCtx),
+    bodyTags: await bodyTags(documentCtx),
+    htmlProps: await htmlProps(documentCtx),
     docProps,
     pathname,
     ampPath,
@@ -597,6 +646,7 @@ export async function renderToHTML(
     dynamicImports,
     files,
     devFiles,
+    polyfillFiles,
   })
 
   if (inAmpMode && html) {
