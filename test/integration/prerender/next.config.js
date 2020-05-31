@@ -1,3 +1,12 @@
 module.exports = {
-  target: 'serverless'
+  experimental: {
+    rewrites() {
+      return [
+        {
+          source: '/about',
+          destination: '/lang/en/about',
+        },
+      ]
+    },
+  },
 }
