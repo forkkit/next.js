@@ -1,4 +1,3 @@
-import React from 'react'
 import Link from 'next/link'
 import { useCount, useDispatchCount } from '../components/Counter'
 
@@ -6,13 +5,13 @@ const IndexPage = () => {
   const count = useCount()
   const dispatch = useDispatchCount()
 
-  const handleIncrease = event =>
+  const handleIncrease = (event) =>
     dispatch({
-      type: 'INCREASE'
+      type: 'INCREASE',
     })
-  const handleDecrease = event =>
+  const handleDecrease = (event) =>
     dispatch({
-      type: 'DECREASE'
+      type: 'DECREASE',
     })
 
   return (
@@ -22,7 +21,7 @@ const IndexPage = () => {
       <button onClick={handleIncrease}>Increase</button>
       <button onClick={handleDecrease}>Decrease</button>
       <p>
-        <Link href='/about'>
+        <Link href="/about">
           <a>About</a>
         </Link>
       </p>

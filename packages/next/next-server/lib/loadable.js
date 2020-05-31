@@ -29,22 +29,22 @@ const ALL_INITIALIZERS = []
 const READY_INITIALIZERS = []
 let initialized = false
 
-function load (loader) {
+function load(loader) {
   let promise = loader()
 
   let state = {
     loading: true,
     loaded: null,
-    error: null
+    error: null,
   }
 
   state.promise = promise
-    .then(loaded => {
+    .then((loaded) => {
       state.loading = false
       state.loaded = loaded
       return loaded
     })
-    .catch(err => {
+    .catch((err) => {
       state.loading = false
       state.error = err
       throw err
@@ -53,17 +53,17 @@ function load (loader) {
   return state
 }
 
-function loadMap (obj) {
+function loadMap(obj) {
   let state = {
     loading: false,
     loaded: {},
-    error: null
+    error: null,
   }
 
   let promises = []
 
   try {
-    Object.keys(obj).forEach(key => {
+    Object.keys(obj).forEach((key) => {
       let result = load(obj[key])
 
       if (!result.loading) {
@@ -76,10 +76,10 @@ function loadMap (obj) {
       promises.push(result.promise)
 
       result.promise
-        .then(res => {
+        .then((res) => {
           state.loaded[key] = res
         })
-        .catch(err => {
+        .catch((err) => {
           state.error = err
         })
     })
@@ -88,11 +88,11 @@ function loadMap (obj) {
   }
 
   state.promise = Promise.all(promises)
-    .then(res => {
+    .then((res) => {
       state.loading = false
       return res
     })
-    .catch(err => {
+    .catch((err) => {
       state.loading = false
       throw err
     })
@@ -100,15 +100,15 @@ function loadMap (obj) {
   return state
 }
 
-function resolve (obj) {
+function resolve(obj) {
   return obj && obj.__esModule ? obj.default : obj
 }
 
-function render (loaded, props) {
+function render(loaded, props) {
   return React.createElement(resolve(loaded), props)
 }
 
-function createLoadableComponent (loadFn, options) {
+function createLoadableComponent(loadFn, options) {
   let opts = Object.assign(
     {
       loader: null,
@@ -117,21 +117,21 @@ function createLoadableComponent (loadFn, options) {
       timeout: null,
       render: render,
       webpack: null,
-      modules: null
+      modules: null,
     },
     options
   )
 
   let subscription = null
 
-  function init () {
+  function init() {
     if (!subscription) {
       const sub = new LoadableSubscription(loadFn, opts)
       subscription = {
         getCurrentValue: sub.getCurrentValue.bind(sub),
         subscribe: sub.subscribe.bind(sub),
         retry: sub.retry.bind(sub),
-        promise: sub.promise.bind(sub)
+        promise: sub.promise.bind(sub),
       }
     }
     return subscription.promise()
@@ -149,7 +149,7 @@ function createLoadableComponent (loadFn, options) {
     typeof opts.webpack === 'function'
   ) {
     const moduleIds = opts.webpack()
-    READY_INITIALIZERS.push(ids => {
+    READY_INITIALIZERS.push((ids) => {
       for (const moduleId of moduleIds) {
         if (ids.indexOf(moduleId) !== -1) {
           return init()
@@ -164,29 +164,35 @@ function createLoadableComponent (loadFn, options) {
     const context = React.useContext(LoadableContext)
     const state = useSubscription(subscription)
 
-    React.useImperativeHandle(ref, () => ({
-      retry: subscription.retry
-    }))
+    React.useImperativeHandle(
+      ref,
+      () => ({
+        retry: subscription.retry,
+      }),
+      []
+    )
 
     if (context && Array.isArray(opts.modules)) {
-      opts.modules.forEach(moduleName => {
+      opts.modules.forEach((moduleName) => {
         context(moduleName)
       })
     }
 
-    if (state.loading || state.error) {
-      return React.createElement(opts.loading, {
-        isLoading: state.loading,
-        pastDelay: state.pastDelay,
-        timedOut: state.timedOut,
-        error: state.error,
-        retry: subscription.retry
-      })
-    } else if (state.loaded) {
-      return opts.render(state.loaded, props)
-    } else {
-      return null
-    }
+    return React.useMemo(() => {
+      if (state.loading || state.error) {
+        return React.createElement(opts.loading, {
+          isLoading: state.loading,
+          pastDelay: state.pastDelay,
+          timedOut: state.timedOut,
+          error: state.error,
+          retry: subscription.retry,
+        })
+      } else if (state.loaded) {
+        return opts.render(state.loaded, props)
+      } else {
+        return null
+      }
+    }, [props, state])
   }
 
   LoadableComponent.preload = () => init()
@@ -196,7 +202,7 @@ function createLoadableComponent (loadFn, options) {
 }
 
 class LoadableSubscription {
-  constructor (loadFn, opts) {
+  constructor(loadFn, opts) {
     this._loadFn = loadFn
     this._opts = opts
     this._callbacks = new Set()
@@ -206,17 +212,17 @@ class LoadableSubscription {
     this.retry()
   }
 
-  promise () {
+  promise() {
     return this._res.promise
   }
 
-  retry () {
+  retry() {
     this._clearTimeouts()
     this._res = this._loadFn(this._opts.loader)
 
     this._state = {
       pastDelay: false,
-      timedOut: false
+      timedOut: false,
     }
 
     const { _res: res, _opts: opts } = this
@@ -228,7 +234,7 @@ class LoadableSubscription {
         } else {
           this._delay = setTimeout(() => {
             this._update({
-              pastDelay: true
+              pastDelay: true,
             })
           }, opts.delay)
         }
@@ -243,40 +249,38 @@ class LoadableSubscription {
 
     this._res.promise
       .then(() => {
-        this._update()
+        this._update({})
         this._clearTimeouts()
       })
       // eslint-disable-next-line handle-callback-err
-      .catch(err => {
-        this._update()
+      .catch((err) => {
+        this._update({})
         this._clearTimeouts()
       })
     this._update({})
   }
 
-  _update (partial) {
+  _update(partial) {
     this._state = {
       ...this._state,
-      ...partial
+      error: this._res.error,
+      loaded: this._res.loaded,
+      loading: this._res.loading,
+      ...partial,
     }
-    this._callbacks.forEach(callback => callback())
+    this._callbacks.forEach((callback) => callback())
   }
 
-  _clearTimeouts () {
+  _clearTimeouts() {
     clearTimeout(this._delay)
     clearTimeout(this._timeout)
   }
 
-  getCurrentValue () {
-    return {
-      ...this._state,
-      error: this._res.error,
-      loaded: this._res.loaded,
-      loading: this._res.loading
-    }
+  getCurrentValue() {
+    return this._state
   }
 
-  subscribe (callback) {
+  subscribe(callback) {
     this._callbacks.add(callback)
     return () => {
       this._callbacks.delete(callback)
@@ -284,11 +288,11 @@ class LoadableSubscription {
   }
 }
 
-function Loadable (opts) {
+function Loadable(opts) {
   return createLoadableComponent(load, opts)
 }
 
-function LoadableMap (opts) {
+function LoadableMap(opts) {
   if (typeof opts.render !== 'function') {
     throw new Error('LoadableMap requires a `render(loaded, props)` function')
   }
@@ -298,7 +302,7 @@ function LoadableMap (opts) {
 
 Loadable.Map = LoadableMap
 
-function flushInitializers (initializers, ids) {
+function flushInitializers(initializers, ids) {
   let promises = []
 
   while (initializers.length) {
@@ -320,7 +324,7 @@ Loadable.preloadAll = () => {
 }
 
 Loadable.preloadReady = (ids = []) => {
-  return new Promise(resolve => {
+  return new Promise((resolve) => {
     const res = () => {
       initialized = true
       return resolve()

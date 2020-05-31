@@ -1,4 +1,3 @@
-import React from 'react'
 import { useDispatch } from 'react-redux'
 import { withRedux } from '../lib/redux'
 import { compose } from 'redux'
@@ -17,7 +16,7 @@ const IndexPage = () => {
     dispatch({
       type: 'TICK',
       light: true,
-      lastUpdate: Date.now()
+      lastUpdate: Date.now(),
     })
   }, 1000)
   return (
@@ -40,13 +39,10 @@ IndexPage.getInitialProps = ({ reduxStore }) => {
   dispatch({
     type: 'TICK',
     light: typeof window === 'object',
-    lastUpdate: Date.now()
+    lastUpdate: Date.now(),
   })
 
   return {}
 }
 
-export default compose(
-  withApollo,
-  withRedux
-)(IndexPage)
+export default compose(withApollo, withRedux)(IndexPage)

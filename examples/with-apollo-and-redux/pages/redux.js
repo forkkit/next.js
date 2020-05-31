@@ -1,4 +1,3 @@
-import React from 'react'
 import { useDispatch } from 'react-redux'
 import { withRedux } from '../lib/redux'
 import useInterval from '../lib/useInterval'
@@ -13,7 +12,7 @@ const ReduxPage = () => {
     dispatch({
       type: 'TICK',
       light: true,
-      lastUpdate: Date.now()
+      lastUpdate: Date.now(),
     })
   }, 1000)
   return (
@@ -31,7 +30,7 @@ ReduxPage.getInitialProps = ({ reduxStore }) => {
   dispatch({
     type: 'TICK',
     light: typeof window === 'object',
-    lastUpdate: Date.now()
+    lastUpdate: Date.now(),
   })
 
   return {}

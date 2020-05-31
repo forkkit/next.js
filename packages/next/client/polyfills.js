@@ -1,1 +1,1 @@
-import '__next_polyfill__fetch'
+import 'next/dist/build/polyfills/polyfill-nomodule'

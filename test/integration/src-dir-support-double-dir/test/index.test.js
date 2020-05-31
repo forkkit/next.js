@@ -1,5 +1,5 @@
 /* eslint-env jest */
-/* global jasmine */
+
 import { join } from 'path'
 import fs from 'fs-extra'
 import {
@@ -8,16 +8,16 @@ import {
   launchApp,
   killApp,
   nextBuild,
-  nextStart
+  nextStart,
 } from 'next-test-utils'
 
-jasmine.DEFAULT_TIMEOUT_INTERVAL = 1000 * 60 * 5
+jest.setTimeout(1000 * 60 * 5)
 
 let app
 let appPort
 const appDir = join(__dirname, '../')
 
-function runTests (dev) {
+function runTests(dev) {
   it('should render from pages', async () => {
     const html = await renderViaHTTP(appPort, '/')
     expect(html).toMatch(/PAGES/)

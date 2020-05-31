@@ -1,4 +1,3 @@
-import React from 'react'
 import { useMutation } from '@apollo/react-hooks'
 import gql from 'graphql-tag'
 import PropTypes from 'prop-types'
@@ -20,16 +19,16 @@ const PostUpvoter = ({ votes, id }) => {
     updatePost({
       variables: {
         id,
-        votes: votes + 1
+        votes: votes + 1,
       },
       optimisticResponse: {
         __typename: 'Mutation',
         updatePost: {
           __typename: 'Post',
           id,
-          votes: votes + 1
-        }
-      }
+          votes: votes + 1,
+        },
+      },
     })
   }
 
@@ -62,7 +61,7 @@ const PostUpvoter = ({ votes, id }) => {
 
 PostUpvoter.propTypes = {
   id: PropTypes.string.isRequired,
-  votes: PropTypes.number.isRequired
+  votes: PropTypes.number.isRequired,
 }
 
 export default PostUpvoter

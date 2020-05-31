@@ -1,18 +1,19 @@
 /* eslint-env jest */
-/* global jasmine */
-import { join } from 'path'
-import webdriver from 'next-webdriver'
+
 import {
   findPort,
-  launchApp,
+  getRedboxHeader,
+  hasRedbox,
   killApp,
-  nextStart,
+  launchApp,
   nextBuild,
-  getReactErrorOverlayContent,
-  waitFor
+  nextStart,
+  waitFor,
 } from 'next-test-utils'
+import webdriver from 'next-webdriver'
+import { join } from 'path'
 
-jasmine.DEFAULT_TIMEOUT_INTERVAL = 1000 * 60 * 5
+jest.setTimeout(1000 * 60 * 5)
 let app
 let appPort
 const appDir = join(__dirname, '..')
@@ -20,13 +21,46 @@ const appDir = join(__dirname, '..')
 const firstErrorRegex = /Invalid href passed to router: mailto:idk@idk.com.*invalid-href-passed/
 const secondErrorRegex = /Invalid href passed to router: .*google\.com.*invalid-href-passed/
 
-const showsError = async (pathname, regex, click = false) => {
+const showsError = async (
+  pathname,
+  regex,
+  click = false,
+  isWarn = false,
+  cb
+) => {
   const browser = await webdriver(appPort, pathname)
+  if (isWarn) {
+    await browser.eval(`(function() {
+      window.warnLogs = []
+      var origWarn = window.console.warn
+      window.console.warn = function() {
+        var warnStr = ''
+        for (var i = 0; i < arguments.length; i++) {
+          if (i > 0) warnStr += ' ';
+          warnStr += arguments[i]
+        }
+        window.warnLogs.push(warnStr)
+        origWarn.apply(undefined, arguments)
+      }
+    })()`)
+  }
+
   if (click) {
     await browser.elementByCss('a').click()
   }
-  const errorContent = await getReactErrorOverlayContent(browser)
-  expect(errorContent).toMatch(regex)
+  if (isWarn) {
+    await waitFor(2000)
+    const warnLogs = await browser.eval('window.warnLogs')
+    console.log(warnLogs)
+    expect(warnLogs.some((log) => log.match(regex))).toBe(true)
+  } else {
+    expect(await hasRedbox(browser)).toBe(true)
+    const errorContent = await getRedboxHeader(browser)
+    expect(errorContent).toMatch(regex)
+  }
+
+  if (cb) await cb(browser)
+
   await browser.close()
 }
 
@@ -42,7 +76,8 @@ const noError = async (pathname, click = false) => {
     })
     window.next.router.replace('${pathname}')
   })()`)
-  await waitFor(250)
+  // wait for page to be built and navigated to
+  await waitFor(3000)
   if (click) {
     await browser.elementByCss('a').click()
   }
@@ -55,7 +90,9 @@ describe('Invalid hrefs', () => {
   describe('dev mode', () => {
     beforeAll(async () => {
       appPort = await findPort()
-      app = await launchApp(appDir, appPort)
+      app = await launchApp(appDir, appPort, {
+        env: { __NEXT_TEST_WITH_DEVTOOL: 1 },
+      })
     })
     afterAll(() => killApp(app))
 
@@ -86,9 +123,19 @@ describe('Invalid hrefs', () => {
     it('shows error when dynamic route mismatch is used on Link', async () => {
       await showsError(
         '/dynamic-route-mismatch',
-        /The provided `as` value is incompatible with the `href` value/,
+        /The provided `as` value \(\/blog\/post-1\) is incompatible with the `href` value \(\/\[post\]\)/,
         true
       )
+      await showsError(
+        '/dynamic-route-mismatch',
+        /Mismatching `as` and `href` failed to manually provide the params: post in the `href`'s `query`/,
+        true,
+        true
+      )
+    })
+
+    it('does not throw error when dynamic route mismatch is used on Link and params are manually provided', async () => {
+      await noError('/dynamic-route-mismatch-manual', true)
     })
   })
 
@@ -98,7 +145,7 @@ describe('Invalid hrefs', () => {
       appPort = await findPort()
       app = await nextStart(appDir, appPort)
     })
-    afterAll(() => killApp())
+    afterAll(() => killApp(app))
 
     it('does not show error in production when mailto: is used as href on Link', async () => {
       await noError('/first')
@@ -122,6 +169,26 @@ describe('Invalid hrefs', () => {
 
     it('does not show error in production when https://google.com is used as href on router.replace', async () => {
       await noError('/second?method=replace', true)
+    })
+
+    it('shows error when dynamic route mismatch is used on Link', async () => {
+      const browser = await webdriver(appPort, '/dynamic-route-mismatch')
+      await browser.eval(`(function() {
+        window.caughtErrors = []
+        window.addEventListener('unhandledrejection', (error) => {
+          window.caughtErrors.push(error.reason.message)
+        })
+      })()`)
+      await browser.elementByCss('a').click()
+      await waitFor(500)
+      const errors = await browser.eval('window.caughtErrors')
+      expect(
+        errors.find((err) =>
+          err.includes(
+            'The provided `as` value (/blog/post-1) is incompatible with the `href` value (/[post]). Read more: https://err.sh/vercel/next.js/incompatible-href-as'
+          )
+        )
+      ).toBeTruthy()
     })
   })
 })

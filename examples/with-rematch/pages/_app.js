@@ -1,11 +1,10 @@
 import App from 'next/app'
-import React from 'react'
-
-import withRematch from '../shared/withRematch'
 import { Provider } from 'react-redux'
 
+import withRematch from '../shared/withRematch'
+
 class MyApp extends App {
-  render () {
+  render() {
     const { Component, pageProps, reduxStore } = this.props
     return (
       <Provider store={reduxStore}>

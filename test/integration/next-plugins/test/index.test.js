@@ -1,5 +1,5 @@
 /* eslint-env jest */
-/* global jasmine */
+
 import fs from 'fs-extra'
 import { join } from 'path'
 import cheerio from 'cheerio'
@@ -8,21 +8,21 @@ import {
   findPort,
   launchApp,
   killApp,
-  waitFor,
   nextBuild,
   nextStart,
-  renderViaHTTP
+  renderViaHTTP,
 } from 'next-test-utils'
 
-jasmine.DEFAULT_TIMEOUT_INTERVAL = 1000 * 60 * 2
+jest.setTimeout(1000 * 60 * 2)
 
 let app
 let appPort
 let stdout
+let stderr
 const appDir = join(__dirname, '../app')
 const nextConfigPath = join(appDir, 'next.config.js')
 
-function runTests () {
+function runTests() {
   it('should render tha page without error', async () => {
     const html = await renderViaHTTP(appPort, '/')
     expect(html).toMatch(/home/)
@@ -37,7 +37,7 @@ function runTests () {
   it('should apply headTags from plugin correctly', async () => {
     const html = await renderViaHTTP(appPort, '/')
     const $ = cheerio.load(html)
-    const found = Array.from($('head').children()).find(el => {
+    const found = Array.from($('head').children()).find((el) => {
       return (el.attribs.src || '').match(/googletagmanager.*?my-tracking-id/)
     })
     expect(found).toBeTruthy()
@@ -47,7 +47,7 @@ function runTests () {
     const html = await renderViaHTTP(appPort, '/')
     const $ = cheerio.load(html)
     const found = Array.from($('body').children()).find(
-      el =>
+      (el) =>
         el.type === 'script' &&
         el.children[0] &&
         el.children[0].data.includes('console.log')
@@ -57,7 +57,6 @@ function runTests () {
 
   it('should call clientInit from plugin correctly', async () => {
     const browser = await webdriver(appPort, '/')
-    await waitFor(250)
     expect(await browser.eval('window.didClientInit')).toBe(true)
   })
 
@@ -65,6 +64,10 @@ function runTests () {
     expect(stdout).toMatch(/loaded plugin: @next\/plugin-google-analytics/i)
     expect(stdout).toMatch(/loaded plugin: @zeit\/next-plugin-scope/i)
     expect(stdout).toMatch(/loaded plugin: next-plugin-normal/i)
+  })
+
+  it('should ignore directories in plugins', async () => {
+    expect(stderr).not.toMatch(/listed invalid middleware/i)
   })
 }
 
@@ -77,9 +80,12 @@ describe('Next.js plugins', () => {
       )
       appPort = await findPort()
       app = await launchApp(appDir, appPort, {
-        onStdout (msg) {
+        onStdout(msg) {
           stdout += msg
-        }
+        },
+        onStderr(msg) {
+          stderr += msg
+        },
       })
     })
     afterAll(() => killApp(app))
@@ -109,10 +115,14 @@ describe('Next.js plugins', () => {
         )
         appPort = await findPort()
         stdout = ''
+        stderr = ''
         app = await launchApp(appDir, appPort, {
-          onStdout (msg) {
+          onStdout(msg) {
             stdout += msg
-          }
+          },
+          onStderr(msg) {
+            stderr += msg
+          },
         })
       })
       afterAll(() => killApp(app))
@@ -125,7 +135,6 @@ describe('Next.js plugins', () => {
 
       it('should expose a plugins config', async () => {
         const browser = await webdriver(appPort, '/')
-        await waitFor(500)
         expect(await browser.eval('window.initClientConfig')).toBe('world')
       })
     })
@@ -138,9 +147,11 @@ describe('Next.js plugins', () => {
         `module.exports = { env: { GA_TRACKING_ID: 'my-tracking-id' }, experimental: { plugins: true } }`
       )
       const results = await nextBuild(appDir, undefined, {
-        stdout: true
+        stdout: true,
+        stderr: true,
       })
       stdout = results.stdout
+      stderr = results.stderr
       appPort = await findPort()
       app = await nextStart(appDir, appPort)
     })
@@ -159,9 +170,11 @@ describe('Next.js plugins', () => {
         `module.exports = { target: 'serverless', env: { GA_TRACKING_ID: 'my-tracking-id' }, experimental: { plugins: true } }`
       )
       const results = await nextBuild(appDir, undefined, {
-        stdout: true
+        stdout: true,
+        stderr: true,
       })
       stdout = results.stdout
+      stderr = results.stderr
       appPort = await findPort()
       app = await nextStart(appDir, appPort)
     })

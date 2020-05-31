@@ -1,7 +1,7 @@
-import React, { useReducer, useContext } from 'react'
+import { useReducer, useContext, createContext } from 'react'
 
-const CounterStateContext = React.createContext()
-const CounterDispatchContext = React.createContext()
+const CounterStateContext = createContext()
+const CounterDispatchContext = createContext()
 
 const reducer = (state, action) => {
   switch (action.type) {
@@ -12,7 +12,7 @@ const reducer = (state, action) => {
     case 'INCREASE_BY':
       return state + action.payload
     default:
-      throw new Error(`Unkown action: ${action.type}`)
+      throw new Error(`Unknown action: ${action.type}`)
   }
 }
 

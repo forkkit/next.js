@@ -4,26 +4,26 @@ import Link from 'next/link'
 import React, { Children } from 'react'
 
 const ActiveLink = ({ children, activeClassName, ...props }) => {
-  const { pathname } = useRouter()
+  const { asPath } = useRouter()
   const child = Children.only(children)
   const childClassName = child.props.className || ''
 
   const className =
-    pathname === props.href
+    asPath === props.href
       ? `${childClassName} ${activeClassName}`.trim()
       : childClassName
 
   return (
     <Link {...props}>
       {React.cloneElement(child, {
-        className: className || null
+        className: className || null,
       })}
     </Link>
   )
 }
 
 ActiveLink.propTypes = {
-  activeClassName: PropTypes.string.isRequired
+  activeClassName: PropTypes.string.isRequired,
 }
 
 export default ActiveLink

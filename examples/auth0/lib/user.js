@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
-import fetch from 'isomorphic-unfetch'
 
-export async function fetchUser (cookie = '') {
+export async function fetchUser(cookie = '') {
   if (typeof window !== 'undefined' && window.__user) {
     return window.__user
   }
@@ -10,10 +9,10 @@ export async function fetchUser (cookie = '') {
     '/api/me',
     cookie
       ? {
-        headers: {
-          cookie
+          headers: {
+            cookie,
+          },
         }
-      }
       : {}
   )
 
@@ -29,7 +28,7 @@ export async function fetchUser (cookie = '') {
   return json
 }
 
-export function useFetchUser ({ required } = {}) {
+export function useFetchUser({ required } = {}) {
   const [loading, setLoading] = useState(
     () => !(typeof window !== 'undefined' && window.__user)
   )
@@ -41,30 +40,34 @@ export function useFetchUser ({ required } = {}) {
     return window.__user || null
   })
 
-  useEffect(() => {
-    if (!loading && user) {
-      return
-    }
-    setLoading(true)
-    let isMounted = true
-
-    fetchUser().then(user => {
-      // Only set the user if the component is still mounted
-      if (isMounted) {
-        // When the user is not logged in but login is required
-        if (required && !user) {
-          window.location.href = '/api/login'
-          return
-        }
-        setUser(user)
-        setLoading(false)
+  useEffect(
+    () => {
+      if (!loading && user) {
+        return
       }
-    })
+      setLoading(true)
+      let isMounted = true
 
-    return () => {
-      isMounted = false
-    }
-  }, [])
+      fetchUser().then((user) => {
+        // Only set the user if the component is still mounted
+        if (isMounted) {
+          // When the user is not logged in but login is required
+          if (required && !user) {
+            window.location.href = '/api/login'
+            return
+          }
+          setUser(user)
+          setLoading(false)
+        }
+      })
+
+      return () => {
+        isMounted = false
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  )
 
   return { user, loading }
 }

@@ -1,14 +1,14 @@
 const path = require('path')
 const withCSS = require('@zeit/next-css')
-const withTM = require('next-transpile-modules')
+
+const withTM = require('next-transpile-modules')(['@patternfly'])
 
 const BG_IMAGES_DIRNAME = 'bgimages'
 
 module.exports = withCSS(
   withTM({
-    transpileModules: ['@patternfly'],
     // Webpack config from https://github.com/patternfly/patternfly-react-seed/blob/master/webpack.common.js
-    webpack (config) {
+    webpack(config) {
       config.module.rules.push({
         test: /\.(svg|ttf|eot|woff|woff2)$/,
         // only process modules with this loader
@@ -30,7 +30,7 @@ module.exports = withCSS(
           path.resolve(
             __dirname,
             'node_modules/@patternfly/patternfly/assets/pficon'
-          )
+          ),
         ],
         use: {
           loader: 'file-loader',
@@ -39,14 +39,14 @@ module.exports = withCSS(
             limit: 5000,
             publicPath: '/_next/static/fonts/',
             outputPath: 'static/fonts/',
-            name: '[name].[ext]'
-          }
-        }
+            name: '[name].[ext]',
+          },
+        },
       })
 
       config.module.rules.push({
         test: /\.svg$/,
-        include: input => input.indexOf('background-filter.svg') > 1,
+        include: (input) => input.indexOf('background-filter.svg') > 1,
         use: [
           {
             loader: 'url-loader',
@@ -54,36 +54,36 @@ module.exports = withCSS(
               limit: 5000,
               publicPath: '/_next/static/svgs/',
               outputPath: 'static/svgs/',
-              name: '[name].[ext]'
-            }
-          }
-        ]
+              name: '[name].[ext]',
+            },
+          },
+        ],
       })
 
       config.module.rules.push({
         test: /\.svg$/,
         // only process SVG modules with this loader if they live under a 'bgimages' directory
         // this is primarily useful when applying a CSS background using an SVG
-        include: input => input.indexOf(BG_IMAGES_DIRNAME) > -1,
+        include: (input) => input.indexOf(BG_IMAGES_DIRNAME) > -1,
         use: {
           loader: 'svg-url-loader',
-          options: {}
-        }
+          options: {},
+        },
       })
 
       config.module.rules.push({
         test: /\.svg$/,
         // only process SVG modules with this loader when they don't live under a 'bgimages',
         // 'fonts', or 'pficon' directory, those are handled with other loaders
-        include: input =>
+        include: (input) =>
           input.indexOf(BG_IMAGES_DIRNAME) === -1 &&
           input.indexOf('fonts') === -1 &&
           input.indexOf('background-filter') === -1 &&
           input.indexOf('pficon') === -1,
         use: {
           loader: 'raw-loader',
-          options: {}
-        }
+          options: {},
+        },
       })
 
       config.module.rules.push({
@@ -95,13 +95,13 @@ module.exports = withCSS(
               limit: 5000,
               publicPath: '/_next/static/images/',
               outputPath: 'static/images/',
-              name: '[name].[ext]'
-            }
-          }
-        ]
+              name: '[name].[ext]',
+            },
+          },
+        ],
       })
 
       return config
-    }
+    },
   })
 )
